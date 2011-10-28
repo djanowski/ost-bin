@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name              = "ost-bin"
-  s.version           = "0.0.1"
+  s.version           = "0.0.2"
   s.summary           = "ost(1)"
   s.authors           = ["Damian Janowski"]
   s.email             = ["damian.janowski@gmail.com"]
@@ -15,6 +15,8 @@ Gem::Specification.new do |s|
     "lib/**/*.rb",
     "test/*.*"
   ]
+
+  s.executables << "ost"
 
   s.add_dependency "ost"
   s.add_dependency "clap"
