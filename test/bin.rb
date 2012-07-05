@@ -73,3 +73,32 @@ test "daemonizes" do
 
   assert !File.exist?(pid_path)
 end
+
+test "gracefully handles TERM signals" do
+  r, w = IO.pipe
+  pid, detached_pid = nil
+
+  redis.flushdb
+
+  pid_path = "./test/workers/slow.pid"
+
+  begin
+    redis.rpush("ost:slow", 5)
+
+    pid = spawn("#{root("bin/ost")} -d slow", out: w, chdir: "test")
+
+    until File.exist?(pid_path)
+      sleep 0.5
+    end
+
+    detached_pid = File.read(pid_path).to_i
+
+    Process.kill(:TERM, detached_pid)
+  ensure
+    Process.kill(:INT, pid)
+  end
+
+  wait_for_pid(detached_pid)
+
+  assert_equal "5", redis.get("slow")
+end
