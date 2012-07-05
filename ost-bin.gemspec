@@ -1,6 +1,8 @@
+require File.expand_path("lib/ost-bin/version", File.dirname(__FILE__))
+
 Gem::Specification.new do |s|
   s.name              = "ost-bin"
-  s.version           = "0.0.2"
+  s.version           = Ost::Bin::VERSION
   s.summary           = "ost(1)"
   s.authors           = ["Damian Janowski"]
   s.email             = ["damian.janowski@gmail.com"]
