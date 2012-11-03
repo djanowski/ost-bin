@@ -24,6 +24,11 @@ args = Clap.run ARGV,
     opts[:kill] = true
   }
 
+if opts[:daemonize] && opts[:kill]
+  $stderr.puts "Cannot use -d and -K at the same time"
+  exit 1
+end
+
 worker = args.shift
 worker_path = File.expand_path("workers/#{worker}")
 
