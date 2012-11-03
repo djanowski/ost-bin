@@ -27,6 +27,12 @@ You can daemonize the process by passing the `-d` flag:
 If you daemonize, a file containing the daemonized process ID is written
 to `./workers/stuff.pid`.
 
+You can kill a daemonized worker by passing the `-K` flag:
+
+    $ ost -K stuff
+
+This will send the `TERM` signal to the process.
+
 Support
 -------
 
