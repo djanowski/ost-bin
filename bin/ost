@@ -19,6 +19,9 @@ opts = {}
 args = Clap.run ARGV,
   "-d" => -> {
     opts[:daemonize] = true
+  },
+  "-K" => -> {
+    opts[:kill] = true
   }
 
 worker = args.shift
@@ -26,13 +29,18 @@ worker_path = File.expand_path("workers/#{worker}")
 
 $stdout.sync = true
 
+pid_path = File.expand_path("#{worker}.pid", File.dirname(worker_path))
+
 if opts[:daemonize]
-  pid_path = File.expand_path("#{worker}.pid", File.dirname(worker_path))
   Process.daemon(true)
   File.open(pid_path, File::RDWR|File::EXCL|File::CREAT, 0600) { |io| io.write(Process.pid) }
   at_exit do
     File.delete(pid_path) if File.exists?(pid_path)
   end
+end
+
+if opts[:kill]
+  Process.kill :TERM, File.open(pid_path).read.strip.to_i rescue nil
 end
 
 require worker_path
