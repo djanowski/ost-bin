@@ -23,7 +23,7 @@ end
 
 redis = Redis.connect
 
-test "daemon" do
+test "daemon, implicit start" do
   r, w = IO.pipe
   pid = nil
 
@@ -35,6 +35,23 @@ test "daemon" do
     redis.rpush("ost:echo", 1)
 
     assert_equal "1\n", r.gets
+  ensure
+    Process.kill(:INT, pid) if pid
+  end
+end
+
+test "daemon, explicit start" do
+  r, w = IO.pipe
+  pid = nil
+
+  begin
+    redis.flushdb
+
+    pid = spawn("#{root("bin/ost")} start echo", out: w, chdir: "test")
+
+    redis.rpush("ost:echo", 2)
+
+    assert_equal "2\n", r.gets
   ensure
     Process.kill(:INT, pid) if pid
   end
@@ -101,4 +118,29 @@ test "gracefully handles TERM signals" do
   wait_for_pid(detached_pid)
 
   assert_equal "5", redis.get("slow")
+end
+
+test "stops worker from command line action" do
+  r, w = IO.pipe
+  pid, detached_pid = nil
+
+  redis.flushdb
+
+  pid_path = "./test/workers/killme.pid"
+
+  pid = spawn("#{root("bin/ost")} start -d killme", out: w, err: w, chdir: "test")
+
+  sleep 1
+
+  until File.exist?(pid_path)
+    sleep 0.5
+  end
+
+  detached_pid = File.read(pid_path).to_i
+
+  spawn("#{root("bin/ost")} kill killme", chdir: "test")
+
+  wait_for_pid(detached_pid)
+
+  assert_equal "YES", redis.get("killme")
 end
