@@ -16,20 +16,25 @@ Assuming a simple worker:
 
 Place the worker at `./workers/stuff.rb` and then:
 
-    $ ost stuff
+    $ ost start stuff
 
 That should load the worker in the foreground.
 
 You can daemonize the process by passing the `-d` flag:
 
-    $ ost -d stuff
+    $ ost start -d stuff
 
 If you daemonize, a file containing the daemonized process ID is written
 to `./workers/stuff.pid`.
 
-You can kill a daemonized worker by passing the `-K` flag:
+Given that `start` is the default action for running Ost workers it can
+be omitted:
 
-    $ ost -K stuff
+    $ ost -d stuff
+
+You can kill a daemonized worker by issuing the `stop` command:
+
+    $ ost kill stuff
 
 This will send the `TERM` signal to the process.
 
