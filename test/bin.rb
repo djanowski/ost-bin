@@ -130,3 +130,38 @@ test "stops worker from command line action" do
 
   assert_equal "YES", redis.get("killme")
 end
+
+test "use a different dir for pids" do
+  r, w = IO.pipe
+  pid, detached_pid = nil
+
+  redis.flushdb
+
+  begin
+    pid = spawn("#{root("bin/ost")} -d echo -p tmp", out: w, chdir: "test")
+
+    sleep 1
+
+    state = `ps -p #{pid} -o state`.lines.to_a.last[/(\w+)/, 1]
+
+    assert_equal "Z", state
+
+    pid_path = "./test/tmp/echo.pid"
+
+    assert File.exist?(pid_path)
+
+    detached_pid = File.read(pid_path).to_i
+
+    ppid = `ps -p #{detached_pid} -o ppid`.lines.to_a.last[/(\d+)/, 1]
+
+    assert_equal "1", ppid
+  ensure
+    Process.kill(:INT, pid) if pid
+    Process.kill(:INT, detached_pid) if detached_pid
+  end
+
+  wait_for_pid(detached_pid)
+
+  assert !File.exist?(pid_path)
+
+end

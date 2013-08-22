@@ -19,7 +19,10 @@ opts = {}
 args = Clap.run ARGV,
   "-d" => -> {
     opts[:daemonize] = true
-}
+  },
+  "-p" => ->(dir) { 
+    opts[:pids_dir] = dir
+  }
 
 action = args.shift
 worker = args.shift
@@ -32,10 +35,11 @@ unless worker
 end
 
 worker_path = File.expand_path("workers/#{worker}")
+pids_dir = opts[:pids_dir] || File.dirname(worker_path)
 
 $stdout.sync = true
 
-pid_path = File.expand_path("#{worker}.pid", File.dirname(worker_path))
+pid_path = File.expand_path("#{worker}.pid", pids_dir)
 
 case action
 when "start"
