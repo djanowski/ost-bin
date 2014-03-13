@@ -17,54 +17,68 @@ def wait_for_pid(pid)
   end
 end
 
+def read_pid_file(path)
+  until File.exist?(path) && File.size(path) > 0
+    sleep 0.05
+  end
+
+  Integer(File.read(path))
+end
+
 def root(path)
   File.expand_path("../#{path}", File.dirname(__FILE__))
 end
 
 redis = Redis.connect
 
+prepare do
+  redis.flushdb
+  Dir["test/workers/*.pid"].each { |file| File.delete(file) }
+end
+
 test "daemon, implicit start" do
-  r, w = IO.pipe
   pid = nil
 
   begin
     redis.flushdb
 
-    pid = spawn("#{root("bin/ost")} echo", out: w, chdir: "test")
+    pid = spawn("#{root("bin/ost")} echo", chdir: "test")
 
     redis.rpush("ost:echo", 1)
 
-    assert_equal "1\n", r.gets
+    until value = redis.get("echo:result"); end
+
+    assert_equal "1", value
   ensure
     Process.kill(:INT, pid) if pid
   end
 end
 
 test "daemon, explicit start" do
-  r, w = IO.pipe
   pid = nil
 
   begin
     redis.flushdb
 
-    pid = spawn("#{root("bin/ost")} start echo", out: w, chdir: "test")
+    pid = spawn("#{root("bin/ost")} start echo", chdir: "test")
 
     redis.rpush("ost:echo", 2)
 
-    assert_equal "2\n", r.gets
+    until value = redis.get("echo:result"); end
+
+    assert_equal "2", value
   ensure
     Process.kill(:INT, pid) if pid
   end
 end
 
 test "daemonizes" do
-  r, w = IO.pipe
   pid, detached_pid = nil
 
-  redis.flushdb
+  pid_path = "./test/workers/echo.pid"
 
   begin
-    pid = spawn("#{root("bin/ost")} -d echo", out: w, chdir: "test")
+    pid = spawn("#{root("bin/ost")} -d echo", chdir: "test")
 
     sleep 1
 
@@ -72,11 +86,7 @@ test "daemonizes" do
 
     assert_equal "Z", state
 
-    pid_path = "./test/workers/echo.pid"
-
-    assert File.exist?(pid_path)
-
-    detached_pid = File.read(pid_path).to_i
+    detached_pid = read_pid_file(pid_path)
 
     ppid = `ps -p #{detached_pid} -o ppid`.lines.to_a.last[/(\d+)/, 1]
 
@@ -92,55 +102,31 @@ test "daemonizes" do
 end
 
 test "gracefully handles TERM signals" do
-  r, w = IO.pipe
-  pid, detached_pid = nil
-
-  redis.flushdb
-
-  pid_path = "./test/workers/slow.pid"
+  redis.rpush("ost:slow", 3)
 
   begin
-    redis.rpush("ost:slow", 5)
+    spawn("#{root("bin/ost")} -d slow", chdir: "test")
 
-    pid = spawn("#{root("bin/ost")} -d slow", out: w, chdir: "test")
+    pid = read_pid_file("./test/workers/slow.pid")
 
-    until File.exist?(pid_path)
-      sleep 0.5
-    end
-
-    detached_pid = File.read(pid_path).to_i
-
-    Process.kill(:TERM, detached_pid)
+    until redis.llen("ost:slow") == 0; end
   ensure
-    Process.kill(:INT, pid)
+    Process.kill(:TERM, pid)
   end
 
-  wait_for_pid(detached_pid)
+  wait_for_pid(pid)
 
-  assert_equal "5", redis.get("slow")
+  assert_equal "3", redis.get("slow")
 end
 
 test "stops worker from command line action" do
-  r, w = IO.pipe
-  pid, detached_pid = nil
+  spawn("#{root("bin/ost")} start -d killme", chdir: "test")
 
-  redis.flushdb
-
-  pid_path = "./test/workers/killme.pid"
-
-  pid = spawn("#{root("bin/ost")} start -d killme", out: w, err: w, chdir: "test")
-
-  sleep 1
-
-  until File.exist?(pid_path)
-    sleep 0.5
-  end
-
-  detached_pid = File.read(pid_path).to_i
+  pid = read_pid_file("./test/workers/killme.pid")
 
   spawn("#{root("bin/ost")} kill killme", chdir: "test")
 
-  wait_for_pid(detached_pid)
+  wait_for_pid(pid)
 
   assert_equal "YES", redis.get("killme")
 end
