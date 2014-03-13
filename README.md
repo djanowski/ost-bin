@@ -38,6 +38,11 @@ You can kill a daemonized worker by issuing the `stop` command:
 
 This will send the `TERM` signal to the process.
 
+If you want to store your PID files in a directory other than `./workers`, use
+`-p`:
+
+    $ ost stuff -d -p /var/run
+
 Support
 -------
 
