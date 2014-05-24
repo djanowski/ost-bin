@@ -1,4 +1,4 @@
 test:
-	gs cutest test/bin.rb
+	cutest test/bin.rb
 
 .PHONY: test
