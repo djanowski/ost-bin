@@ -1,5 +1,6 @@
 require "cutest"
 require "redis"
+require "timeout"
 
 at_exit {
   Process.waitall
@@ -8,11 +9,13 @@ at_exit {
 def wait_for_pid(pid)
   running = true
 
-  while running
-    begin
-      Process.kill(0, pid)
-    rescue Errno::ESRCH
-      running = false
+  Timeout.timeout(4) do
+    while running
+      begin
+        Process.kill(0, pid)
+      rescue Errno::ESRCH
+        running = false
+      end
     end
   end
 end
