@@ -39,25 +39,7 @@ prepare do
   Dir["test/workers/*.pid"].each { |file| File.delete(file) }
 end
 
-test "daemon, implicit start" do
-  pid = nil
-
-  begin
-    redis.flushdb
-
-    pid = spawn("#{root("bin/ost")} echo", chdir: "test")
-
-    redis.rpush("ost:echo", 1)
-
-    until value = redis.get("echo:result"); end
-
-    assert_equal "1", value
-  ensure
-    Process.kill(:INT, pid) if pid
-  end
-end
-
-test "daemon, explicit start" do
+test "start" do
   pid = nil
 
   begin
@@ -81,7 +63,7 @@ test "daemonizes" do
   pid_path = "./test/workers/echo.pid"
 
   begin
-    pid = spawn("#{root("bin/ost")} -d echo", chdir: "test")
+    pid = spawn("#{root("bin/ost")} -d start echo", chdir: "test")
 
     sleep 1
 
@@ -108,7 +90,7 @@ test "gracefully handles TERM signals" do
   redis.rpush("ost:slow", 3)
 
   begin
-    spawn("#{root("bin/ost")} -d slow", chdir: "test")
+    spawn("#{root("bin/ost")} -d start slow", chdir: "test")
 
     pid = read_pid_file("./test/workers/slow.pid")
 
@@ -139,7 +121,7 @@ test "use a different dir for pids" do
   pid_path = "./test/tmp/echo.pid"
 
   begin
-    spawn("#{root("bin/ost")} -d echo -p tmp", chdir: "test")
+    spawn("#{root("bin/ost")} -d start echo -p tmp", chdir: "test")
 
     pid = read_pid_file(pid_path)
 

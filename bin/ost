@@ -20,14 +20,12 @@ args = Clap.run ARGV,
   "-d" => -> {
     opts[:daemonize] = true
   },
-  "-p" => ->(dir) { 
+  "-p" => ->(dir) {
     opts[:pids_dir] = dir
   }
 
 action = args.shift
 worker = args.shift
-
-action, worker = "start", action unless worker
 
 unless worker
   $stderr.puts "Must indicate a worker name"
