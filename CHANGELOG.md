@@ -1,9 +1,12 @@
-# (unreleased)
+# 0.1.0 - 2014-05-26
 
-* New `-p` switch to specify the path where PID files should be stored.
+* Moved to a threaded model.
 
-* `ost(1)` now accepts commands: `start` and `kill`. For now, `start` is
-  implicit, so there is no backwards incompatibility.
+* Added `Ostfile` to specify which workers you want to run.
+
+* New `-p` switch to specify the path where the PID file should be stored.
+
+* `ost(1)` now accepts `start` and `stop` commands.
 
 # 0.0.3 - 2012-07-05
 
