@@ -11,48 +11,119 @@ end
 trap(:INT,  &stop)
 trap(:TERM, &stop)
 
+usage = <<-EOS
+Usage:
+
+  ost start [-r <require>] [-d] [-p <pid-path>]
+  ost stop [-p <pid-path>]
+
+EOS
+
 require "clap"
 require "ost"
 
-opts = {}
+opts = {
+  requires: []
+}
 
-args = Clap.run ARGV,
+command, _ = Clap.run ARGV,
   "-d" => -> {
     opts[:daemonize] = true
   },
-  "-p" => ->(dir) {
-    opts[:pids_dir] = dir
+  "-p" => -> path {
+    opts[:pid_path] = path
+  },
+  "-s" => -> size {
+    opts[:pool_size] = Integer(size)
+  },
+  "-r" => -> file {
+    opts[:requires] << file
+  },
+  "-v" => -> {
+    require_relative "../lib/ost-bin/version"
+
+    puts Ost::Bin::VERSION
+
+    exit 0
+  },
+  "-h" => -> {
+    puts(usage)
+    exit 0
   }
 
-action = args.shift
-worker = args.shift
+opts[:pid_path] = File.expand_path("ost.pid") unless opts.include?(:pid_path)
 
-unless worker
-  $stderr.puts "Must indicate a worker name"
-  exit 1
+opts[:requires].each do |file|
+  require(file)
 end
 
-worker_path = File.expand_path("workers/#{worker}")
-pids_dir = opts[:pids_dir] || File.dirname(worker_path)
+module Ost
+  def self.run(worker)
+    workers[worker] = worker.new
+  end
 
-$stdout.sync = true
+  def self.workers
+    @workers ||= {}
+  end
+end
 
-pid_path = File.expand_path("#{worker}.pid", pids_dir)
-
-case action
+case command
 when "start"
   if opts[:daemonize]
     Process.daemon(true)
-    File.open(pid_path, File::RDWR|File::EXCL|File::CREAT, 0600) { |io| io.write(Process.pid) }
+
+    File.open(opts[:pid_path], File::RDWR|File::EXCL|File::CREAT, 0600) do |io|
+      io.write(Process.pid)
+    end
+
     at_exit do
-      File.delete(pid_path) if File.exists?(pid_path)
+      File.delete(opts[:pid_path]) if File.exists?(opts[:pid_path])
     end
   end
 
-  require worker_path
-when "kill"
-  Process.kill :TERM, File.open(pid_path).read.strip.to_i
+  load "./Ostfile"
+
+  opts[:pool_size] = Ost.workers.size unless opts.include?(:pool_size)
+
+  threads_per_worker = opts[:pool_size] / Ost.workers.size
+
+  if threads_per_worker == 0
+    abort("Not enough threads for your workers (found #{Ost.workers.size} workers).")
+  end
+
+  pool = Ost.workers.each_with_object([]) do |(queue, handler), accum|
+    accum.concat(Array.new(threads_per_worker) do
+      Thread.new(queue, handler) do |q, h|
+        queue = Ost[q]
+
+        queue.each do |item|
+          handler.call(item)
+        end
+      end
+    end)
+  end
+
+  pool.each(&:join)
+
+when "stop"
+  pid = Integer(File.read(opts[:pid_path]).chomp)
+
+  running = true
+
+  Process.kill(:TERM, pid)
+
+  while running
+    begin
+      Process.kill(0, pid)
+      running = true
+    rescue Errno::ESRCH
+      running = false
+    end
+  end
+
 else
-  $stderr.puts "ost-bin command not recognized. Valid are: start, kill"
+  $stderr.puts("Unkown command #{command.inspect}.")
+  $stderr.puts(usage)
+
   exit 2
 end

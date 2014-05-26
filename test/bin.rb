@@ -7,23 +7,36 @@ at_exit {
 }
 
 def wait_for_pid(pid)
-  running = true
+  wait_for { !running?(pid) }
+end
 
-  Timeout.timeout(4) do
-    while running
-      begin
-        Process.kill(0, pid)
-      rescue Errno::ESRCH
-        running = false
-      end
+def wait_for_child(pid)
+  Timeout.timeout(5) do
+    Process.wait(pid)
+  end
+end
+
+def wait_for
+  Timeout.timeout(5) do
+    until value = yield
+      sleep 0.1
     end
+
+    return value
+  end
+end
+
+def running?(pid)
+  begin
+    Process.kill(0, pid)
+    true
+  rescue Errno::ESRCH
+    false
   end
 end
 
 def read_pid_file(path)
-  until File.exist?(path) && File.size(path) > 0
-    sleep 0.05
-  end
+  wait_for { File.exist?(path) && File.size(path) > 0 }
 
   Integer(File.read(path))
 end
@@ -36,7 +49,7 @@ redis = Redis.connect
 
 prepare do
   redis.flushdb
-  Dir["test/workers/*.pid"].each { |file| File.delete(file) }
+  Dir["test/workers/**/*.pid"].each { |file| File.delete(file) }
 end
 
 test "start" do
@@ -45,11 +58,11 @@ test "start" do
   begin
     redis.flushdb
 
-    pid = spawn("#{root("bin/ost")} start echo", chdir: "test")
+    pid = spawn("#{root("bin/ost")} start", chdir: "test/workers/echo")
 
-    redis.rpush("ost:echo", 2)
+    redis.rpush("ost:Echo", 2)
 
-    until value = redis.get("echo:result"); end
+    value = wait_for { redis.get("Echo:result") }
 
     assert_equal "2", value
   ensure
@@ -60,16 +73,14 @@ end
 test "daemonizes" do
   pid, detached_pid = nil
 
-  pid_path = "./test/workers/echo.pid"
+  pid_path = "./test/workers/echo/ost.pid"
 
   begin
-    pid = spawn("#{root("bin/ost")} -d start echo", chdir: "test")
+    pid = spawn("#{root("bin/ost")} -d start", chdir: "test/workers/echo")
 
-    sleep 1
-
-    state = `ps -p #{pid} -o state`.lines.to_a.last[/(\w+)/, 1]
-
-    assert_equal "Z", state
+    assert wait_for {
+      `ps -p #{pid} -o state`.lines.to_a.last[/(\w+)/, 1] == "Z"
+    }
 
     detached_pid = read_pid_file(pid_path)
 
@@ -87,14 +98,14 @@ test "daemonizes" do
 end
 
 test "gracefully handles TERM signals" do
-  redis.rpush("ost:slow", 3)
+  redis.rpush("ost:Slow", 3)
 
   begin
-    spawn("#{root("bin/ost")} -d start slow", chdir: "test")
+    spawn("#{root("bin/ost")} -d start", chdir: "test/workers/slow")
 
-    pid = read_pid_file("./test/workers/slow.pid")
+    pid = read_pid_file("./test/workers/slow/ost.pid")
 
-    until redis.llen("ost:slow") == 0; end
+    assert wait_for { redis.llen("ost:Slow") == 0 }
   ensure
     Process.kill(:TERM, pid)
   end
@@ -104,24 +115,33 @@ test "gracefully handles TERM signals" do
   assert_equal "3", redis.get("slow")
 end
 
-test "stops worker from command line action" do
-  spawn("#{root("bin/ost")} start -d killme", chdir: "test")
+test "stop waits for workers to be done" do
+  spawn("#{root("bin/ost")} start -d", chdir: "test/workers/slow")
 
-  pid = read_pid_file("./test/workers/killme.pid")
+  pid = read_pid_file("./test/workers/slow/ost.pid")
 
-  spawn("#{root("bin/ost")} kill killme", chdir: "test")
+  stopper = spawn("#{root("bin/ost")} stop", chdir: "test/workers/slow")
 
-  wait_for_pid(pid)
+  # Let the stop command start.
+  wait_for { running?(stopper) }
 
-  assert_equal "YES", redis.get("killme")
+  # Let the stop command end.
+  wait_for_child(stopper)
+
+  # Immediately after the stop command exits,
+  # ost shouldn't be running and the pid file
+  # should be gone.
+
+  assert !running?(pid)
+  assert !File.exist?("./test/workers/slow/ost.pid")
 end
 
-test "use a different dir for pids" do
+test "use a specific path for the pid file" do
   pid = nil
-  pid_path = "./test/tmp/echo.pid"
+  pid_path = "./test/workers/echo/foo.pid"
 
   begin
-    spawn("#{root("bin/ost")} -d start echo -p tmp", chdir: "test")
+    spawn("#{root("bin/ost")} -d start -p foo.pid", chdir: "test/workers/echo")
 
     pid = read_pid_file(pid_path)
 
@@ -133,4 +153,22 @@ test "use a different dir for pids" do
   wait_for_pid(pid)
 
   assert !File.exist?(pid_path)
+end
+
+test "load Ostfile" do
+  pid = nil
+
+  begin
+    redis.flushdb
+
+    pid = spawn("#{root("bin/ost")} start", chdir: "test/workers/echo")
+
+    redis.rpush("ost:Echo", 2)
+
+    value = wait_for { redis.get("Echo:result") }
+
+    assert_equal "2", value
+  ensure
+    Process.kill(:INT, pid) if pid
+  end
 end

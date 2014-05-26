@@ -1,49 +1,72 @@
 ost(1)
 ======
 
-Just an experiment for running daemonized Ost workers.
+Lets you define and run [Ost][ost] workers.
+
 
 Usage
 -----
 
 Assuming a simple worker:
 
-    require "app"
+    class Mailer
+      def call(item)
+        puts "Emailing #{item}..."
 
-    Ost[:stuff].each do |item|
-      # process item
+        # Actually do it.
+      end
     end
 
-Place the worker at `./workers/stuff.rb` and then:
+Declare it in a file named `Ostfile` at the root of your project:
 
-    $ ost start stuff
+    require "app"
 
-That should load the worker in the foreground.
+    Ost.run(Mailer)
 
-You can daemonize the process by passing the `-d` flag:
+From the command line:
 
-    $ ost start -d stuff
+    $ ost start
 
-If you daemonize, a file containing the daemonized process ID is written
-to `./workers/stuff.pid`.
+Enqueue some items and see it running:
 
-Given that `start` is the default action for running Ost workers it can
-be omitted:
+    $ redis-cli lpush ost:Mailer foo bar baz
 
-    $ ost -d stuff
+Once you're up and running, deploy your workers using `-d` for daemonization:
 
-You can kill a daemonized worker by issuing the `stop` command:
+    $ ost start -d
 
-    $ ost kill stuff
+You can stop the worker pool by issuing the `stop` command:
 
-This will send the `TERM` signal to the process.
+    $ ost stop
 
-If you want to store your PID files in a directory other than `./workers`, use
-`-p`:
+This will wait for all workers to exit gracefully.
 
-    $ ost stuff -d -p /var/run
+For more information, run:
+
+    $ ost -h
+
+
+Design notes
+------------
+
+`ost(1)` assumes that your workers perform a fair amount of I/O (probably one
+of the most common reasons to send jobs to the background). We will optimize
+`ost(1)` for this use case.
+
+Currently, `ost(1)` runs multiple threads per worker. However, we may `fork(2)`
+if we find that's better for multiple-core utilization under MRI.
+
+
+See also
+--------
+
+[Ost::Worker][ost-worker].
+
 
 Support
 -------
 
-For now, this experiment is only tested on MRI 1.9.2+.
+Since we may use `fork(2)`, `ost(1)` only supports MRI for now.
+
+[ost]: https://github.com/soveran/ost
+[ost-worker]: https://github.com/djanowski/ost-worker
