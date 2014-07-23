@@ -29,6 +29,7 @@ opts = {
 command, _ = Clap.run ARGV,
   "-d" => -> {
     opts[:daemonize] = true
+    opts[:log_path] = File.expand_path("ost.log") unless opts.include?(:log_path)
   },
   "-p" => -> path {
     opts[:pid_path] = path
@@ -79,6 +80,11 @@ when "start"
     at_exit do
       File.delete(opts[:pid_path]) if File.exists?(opts[:pid_path])
     end
+  end
+
+  if opts[:log_path]
+    $stdout.reopen(opts[:log_path], "a")
+    $stderr.reopen(opts[:log_path], "a")
   end
 
   load "./Ostfile"
