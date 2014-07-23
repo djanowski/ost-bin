@@ -201,3 +201,32 @@ test "redirect stdout and stderr to a log file when daemonizing" do
 
   assert_equal "out: 1\nerr: 1\n", File.read(log_path)
 end
+
+test "redirect stdout and stderr to a different log file when daemonizing" do
+  pid, detached_pid = nil
+
+  pid_path = "./test/workers/logger/ost.pid"
+
+  log_path = "test/workers/logger/foo.log"
+
+  File.delete(log_path) if File.exist?(log_path)
+
+  begin
+    pid = spawn("#{root("bin/ost")} -d -l foo.log start", chdir: "test/workers/logger")
+
+    assert wait_for {
+      `ps -p #{pid} -o state`.lines.to_a.last[/(\w+)/, 1] == "Z"
+    }
+
+    redis.lpush("ost:Logger", 1)
+  ensure
+    detached_pid = read_pid_file(pid_path)
+
+    Process.kill(:INT, pid) if pid
+    Process.kill(:INT, detached_pid) if detached_pid
+  end
+
+  wait_for_pid(detached_pid)
+
+  assert_equal "out: 1\nerr: 1\n", File.read(log_path)
+end

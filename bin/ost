@@ -14,7 +14,7 @@ trap(:TERM, &stop)
 usage = <<-EOS
 Usage:
 
-  ost start [-r <require>] [-d] [-p <pid-path>]
+  ost start [-r <require>] [-d] [-p <pid-path>] [-l <log-path>]
   ost stop [-p <pid-path>]
 
 EOS
@@ -30,6 +30,9 @@ command, _ = Clap.run ARGV,
   "-d" => -> {
     opts[:daemonize] = true
     opts[:log_path] = File.expand_path("ost.log") unless opts.include?(:log_path)
+  },
+  "-l" => -> path {
+    opts[:log_path] = path
   },
   "-p" => -> path {
     opts[:pid_path] = path
