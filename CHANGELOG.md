@@ -1,3 +1,8 @@
+# 0.1.1 - 2014-07-23
+
+* When daemonized, all output is now redirected to a file. It's `ost.log` by
+  default, but you can specify a different path via `-l`.
+
 # 0.1.0 - 2014-05-26
 
 * Moved to a threaded model.
